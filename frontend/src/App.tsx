@@ -8,6 +8,13 @@ import {
     TableRow,
     Paper,
     TableSortLabel,
+    Select,
+    MenuItem,
+    FormControl,
+    InputLabel,
+    Box,
+    Typography,
+    CircularProgress,
 } from "@mui/material";
 
 const API_BASE_URL = "http://127.0.0.1:5000";
@@ -25,27 +32,7 @@ interface Shelter {
     totalRooms: number;
 }
 
-// Extracted function to render table rows
-const renderTableRows = (shelters: Shelter[]) => {
-return shelters.map((shelter, index) => (
-        <TableRow key={index}>
-            <TableCell>{shelter.name}</TableCell>
-            <TableCell>
-                <a href={`https://maps.google.com/?q=${encodeURIComponent(shelter.address)}`} target="_blank" rel="noopener noreferrer">
-                        {shelter.address}
-                    </a>
-            </TableCell>
-            <TableCell>{shelter.postalCode}</TableCell>
-            <TableCell>{shelter.availableBeds}</TableCell>
-            <TableCell>{shelter.totalBeds}</TableCell>
-            <TableCell>{shelter.availableRooms}</TableCell>
-            <TableCell>{shelter.totalRooms}</TableCell>
-            <TableCell>{shelter.serviceType}</TableCell>
-            <TableCell>{shelter.capacityType}</TableCell>
-            <TableCell>{shelter.sector}</TableCell>
-        </TableRow>
-    ));
-};
+type FilterableKeys = keyof Pick<Shelter, "serviceType" | "capacityType" | "sector">;
 
 const App: React.FC = () => {
     const [data, setData] = useState<Shelter[]>([]);
@@ -55,13 +42,27 @@ const App: React.FC = () => {
     const [sortColumn, setSortColumn] = useState<keyof Shelter>("name");
     const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
 
+    const [filterServiceType, setFilterServiceType] = useState<string>("");
+    const [filterCapacityType, setFilterCapacityType] = useState<string>("");
+    const [filterSector, setFilterSector] = useState<string>("");
+
+    const uniqueValues = (field: FilterableKeys): string[] =>
+        Array.from(new Set(data.map((item) => item[field])));
+
     const handleSort = (column: keyof Shelter) => {
         const isAsc = sortColumn === column && sortDirection === "asc";
         setSortDirection(isAsc ? "desc" : "asc");
         setSortColumn(column);
     };
 
-    const sortedData = [...data].sort((a, b) => {
+    const filteredData = data.filter(
+        (shelter) =>
+            (!filterServiceType || shelter.serviceType === filterServiceType) &&
+            (!filterCapacityType || shelter.capacityType === filterCapacityType) &&
+            (!filterSector || shelter.sector === filterSector)
+    );
+
+    const sortedData = [...filteredData].sort((a, b) => {
         const valueA = a[sortColumn];
         const valueB = b[sortColumn];
 
@@ -79,18 +80,17 @@ const App: React.FC = () => {
     useEffect(() => {
         const fetchData = async () => {
             try {
-                const response = await fetch(`${API_BASE_URL}/api/shelters`); // Adjust path if necessary
+                const response = await fetch(`${API_BASE_URL}/api/shelters`);
                 if (!response.ok) {
                     throw new Error(`HTTP error! status: ${response.status}`);
                 }
                 const jsonData: Shelter[] = await response.json();
                 setData(jsonData);
-            } catch (err: unknown) {
-                // Narrow the type of 'err' to handle it appropriately
+            } catch (err) {
                 if (err instanceof Error) {
                     setError(err.message);
                 } else {
-                    setError('An unknown error occurred.');
+                    setError("An unknown error occurred.");
                 }
             } finally {
                 setLoading(false);
@@ -101,16 +101,72 @@ const App: React.FC = () => {
     }, []);
 
     if (loading) {
-        return <div>Loading...</div>;
+        return (
+            <Box sx={{ textAlign: "center", mt: 4 }}>
+                <CircularProgress />
+            </Box>
+        );
     }
 
     if (error) {
-        return <div>Error: {error}</div>;
+        return (
+            <Box sx={{ textAlign: "center", mt: 4, color: "red" }}>
+                <Typography variant="h6">Error: {error}</Typography>
+            </Box>
+        );
     }
 
     return (
-        <div style={{ padding: "20px" }}>
-            <h1>Toronto Shelter Availability</h1>
+        <Box sx={{ padding: "20px" }}>
+            <Typography variant="h4" sx={{ mb: 3, fontWeight: "bold" }}>
+                Toronto Shelter Availability
+            </Typography>
+
+            <Box sx={{ display: "flex", gap: "20px", mb: 3, flexWrap: "wrap" }}>
+                <FormControl sx={{ minWidth: 200 }}>
+                    <InputLabel>Service Type</InputLabel>
+                    <Select
+                        value={filterServiceType}
+                        onChange={(e) => setFilterServiceType(e.target.value)}
+                    >
+                        <MenuItem value="">All</MenuItem>
+                        {uniqueValues("serviceType").map((value) => (
+                            <MenuItem key={value} value={value}>
+                                {value}
+                            </MenuItem>
+                        ))}
+                    </Select>
+                </FormControl>
+                <FormControl sx={{ minWidth: 200 }}>
+                    <InputLabel>Capacity Type</InputLabel>
+                    <Select
+                        value={filterCapacityType}
+                        onChange={(e) => setFilterCapacityType(e.target.value)}
+                    >
+                        <MenuItem value="">All</MenuItem>
+                        {uniqueValues("capacityType").map((value) => (
+                            <MenuItem key={value} value={value}>
+                                {value}
+                            </MenuItem>
+                        ))}
+                    </Select>
+                </FormControl>
+                <FormControl sx={{ minWidth: 200 }}>
+                    <InputLabel>Sector</InputLabel>
+                    <Select
+                        value={filterSector}
+                        onChange={(e) => setFilterSector(e.target.value)}
+                    >
+                        <MenuItem value="">All</MenuItem>
+                        {uniqueValues("sector").map((value) => (
+                            <MenuItem key={value} value={value}>
+                                {value}
+                            </MenuItem>
+                        ))}
+                    </Select>
+                </FormControl>
+            </Box>
+
             <TableContainer component={Paper}>
                 <Table>
                     <TableHead>
@@ -162,39 +218,40 @@ const App: React.FC = () => {
                                     Total Rooms
                                 </TableSortLabel>
                             </TableCell>
-                            <TableCell>
-                                <TableSortLabel
-                                    active={sortColumn === "serviceType"}
-                                    direction={sortColumn === "serviceType" ? sortDirection : "asc"}
-                                    onClick={() => handleSort("serviceType")}
-                                >
-                                    Service Type
-                                </TableSortLabel>
-                            </TableCell>
-                            <TableCell>
-                                <TableSortLabel
-                                    active={sortColumn === "capacityType"}
-                                    direction={sortColumn === "capacityType" ? sortDirection : "asc"}
-                                    onClick={() => handleSort("capacityType")}
-                                >
-                                    Capacity Type
-                                </TableSortLabel>
-                            </TableCell>
-                            <TableCell>
-                                <TableSortLabel
-                                    active={sortColumn === "sector"}
-                                    direction={sortColumn === "sector" ? sortDirection : "asc"}
-                                    onClick={() => handleSort("sector")}
-                                >
-                                    Sector
-                                </TableSortLabel>
-                            </TableCell>
+                            <TableCell>Service Type</TableCell>
+                            <TableCell>Capacity Type</TableCell>
+                            <TableCell>Sector</TableCell>
                         </TableRow>
                     </TableHead>
-                    <TableBody>{renderTableRows(sortedData)}</TableBody>
+                    <TableBody>
+                        {sortedData.map((shelter, index) => (
+                            <TableRow key={index}>
+                                <TableCell>{shelter.name}</TableCell>
+                                <TableCell>
+                                    <a
+                                        href={`https://maps.google.com/?q=${encodeURIComponent(
+                                            shelter.address
+                                        )}`}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                    >
+                                        {shelter.address}
+                                    </a>
+                                </TableCell>
+                                <TableCell>{shelter.postalCode}</TableCell>
+                                <TableCell>{shelter.availableBeds}</TableCell>
+                                <TableCell>{shelter.totalBeds}</TableCell>
+                                <TableCell>{shelter.availableRooms}</TableCell>
+                                <TableCell>{shelter.totalRooms}</TableCell>
+                                <TableCell>{shelter.serviceType}</TableCell>
+                                <TableCell>{shelter.capacityType}</TableCell>
+                                <TableCell>{shelter.sector}</TableCell>
+                            </TableRow>
+                        ))}
+                    </TableBody>
                 </Table>
             </TableContainer>
-        </div>
+        </Box>
     );
 };
 
