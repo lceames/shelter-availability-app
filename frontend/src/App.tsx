@@ -15,6 +15,9 @@ import {
     Box,
     Typography,
     CircularProgress,
+    TextField,
+    Button,
+    Autocomplete
 } from "@mui/material";
 
 const API_BASE_URL = "http://127.0.0.1:5000";
@@ -30,32 +33,100 @@ interface Shelter {
     totalBeds: number;
     availableRooms: number;
     totalRooms: number;
+    latitude?: number;
+    longitude?: number;
 }
 
-type FilterableKeys = keyof Pick<Shelter, "serviceType" | "capacityType" | "sector">;
+interface PostalCode {
+    longitude: number;
+    latitude: number;
+    code: string;
+}
+
+interface AppData {
+    shelterAvailabilities: Shelter[];
+    updateDate: string;
+    postalCodes: PostalCode[]; 
+}
+
+const defaultAppData: AppData = {
+    shelterAvailabilities: [],
+    updateDate: new Date().toISOString(), // Set a default date
+    postalCodes: [],
+};
 
 const App: React.FC = () => {
-    const [data, setData] = useState<Shelter[]>([]);
+    const [data, setData] = useState<AppData>(defaultAppData);
+    const [userInput, setUserInput] = useState<string>("");
+    const [selectedPostalCode, setSelectedPostalCode] = useState<PostalCode | null>(null);
     const [loading, setLoading] = useState<boolean>(true);
     const [error, setError] = useState<string | null>(null);
 
-    const [sortColumn, setSortColumn] = useState<keyof Shelter>("name");
+    const [sortColumn, setSortColumn] = useState<keyof Shelter | "distance">("name");
     const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
 
     const [filterServiceType, setFilterServiceType] = useState<string>("");
     const [filterCapacityType, setFilterCapacityType] = useState<string>("");
     const [filterSector, setFilterSector] = useState<string>("");
+    const [userPostalCode, setUserPostalCode] = useState<string>("");
+    const [distances, setDistances] = useState<Record<string, number>>({}); // Distance cache
 
-    const uniqueValues = (field: FilterableKeys): string[] =>
-        Array.from(new Set(data.map((item) => item[field])));
+    // Function to calculate distance using Haversine formula
+    const calculateDistance = (
+        lat1: number,
+        lon1: number,
+        lat2: number,
+        lon2: number
+    ): number => {
+        const toRad = (value: number) => (value * Math.PI) / 180;
+        const R = 6371; // Radius of Earth in kilometers
+        const dLat = toRad(lat2 - lat1);
+        const dLon = toRad(lon2 - lon1);
+        const a =
+            Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+            Math.cos(toRad(lat1)) *
+                Math.cos(toRad(lat2)) *
+                Math.sin(dLon / 2) *
+                Math.sin(dLon / 2);
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        return R * c; // Distance in kilometers
+    };
 
-    const handleSort = (column: keyof Shelter) => {
+    const handleSort = (column: keyof Shelter | "distance") => {
         const isAsc = sortColumn === column && sortDirection === "asc";
         setSortDirection(isAsc ? "desc" : "asc");
         setSortColumn(column);
     };
 
-    const filteredData = data.filter(
+    const fetchCoordinates = async (postalCode: string): Promise<[number, number]> => {
+        // Replace this with an actual API call, e.g., Google Maps Geocoding API
+        const mockCoordinates: Record<string, [number, number]> = {
+            "M5G 1X8": [43.6561, -79.3802],
+            "M4B 1B3": [43.7064, -79.3097],
+        };
+        return mockCoordinates[postalCode] || [0, 0]; // Default mock location
+    };
+
+    const calculateDistances = async () => {
+        if (!userPostalCode) return;
+
+        const [userLat, userLon] = await fetchCoordinates(userPostalCode);
+
+        const updatedDistances: Record<string, number> = {};
+        for (const shelter of data.shelterAvailabilities) {
+            if (shelter.latitude !== undefined && shelter.longitude !== undefined) {
+                updatedDistances[shelter.postalCode] = calculateDistance(
+                    userLat,
+                    userLon,
+                    shelter.latitude,
+                    shelter.longitude
+                );
+            }
+        }
+        setDistances(updatedDistances);
+    };
+
+    const filteredData = data?.shelterAvailabilities.filter(
         (shelter) =>
             (!filterServiceType || shelter.serviceType === filterServiceType) &&
             (!filterCapacityType || shelter.capacityType === filterCapacityType) &&
@@ -63,8 +134,14 @@ const App: React.FC = () => {
     );
 
     const sortedData = [...filteredData].sort((a, b) => {
-        const valueA = a[sortColumn];
-        const valueB = b[sortColumn];
+        if (sortColumn === "distance") {
+            const distanceA = distances[a.postalCode] || Infinity;
+            const distanceB = distances[b.postalCode] || Infinity;
+            return sortDirection === "asc" ? distanceA - distanceB : distanceB - distanceA;
+        }
+
+        const valueA = a[sortColumn as keyof Shelter];
+        const valueB = b[sortColumn as keyof Shelter];
 
         if (typeof valueA === "number" && typeof valueB === "number") {
             return sortDirection === "asc" ? valueA - valueB : valueB - valueA;
@@ -77,6 +154,40 @@ const App: React.FC = () => {
         return 0;
     });
 
+    const handleSearch = () => {
+        if (selectedPostalCode) {
+            console.log(`Selected postal code: ${selectedPostalCode.code}`);
+            setError(null);
+            // Filter shelters based on selected postal code
+            const filteredShelters = data.shelterAvailabilities.filter(
+                (shelter) => shelter.postalCode === selectedPostalCode.code
+            );
+            console.log("Filtered shelters:", filteredShelters);
+        } else {
+            setError("Please select a valid postal code from the list.");
+        }
+    };
+
+    const PostalCodeSearchBox = () => (
+            <Autocomplete
+                options={data.postalCodes}
+                getOptionLabel={(option) => option.code}
+                onInputChange={(event, value) => setUserInput(value)}
+                onChange={(event, value) => setSelectedPostalCode(value)}
+                renderInput={(params) => (
+                    <TextField
+                        {...params}
+                        label="Enter postal code"
+                        variant="outlined"
+                        error={!!error}
+                        helperText={error}
+                        fullWidth
+                    />
+                )}
+                sx={{ minWidth: 200 }}
+            />
+    );
+
     useEffect(() => {
         const fetchData = async () => {
             try {
@@ -84,7 +195,7 @@ const App: React.FC = () => {
                 if (!response.ok) {
                     throw new Error(`HTTP error! status: ${response.status}`);
                 }
-                const jsonData: Shelter[] = await response.json();
+                const jsonData: AppData = await response.json();
                 setData(jsonData);
             } catch (err) {
                 if (err instanceof Error) {
@@ -130,7 +241,7 @@ const App: React.FC = () => {
                         onChange={(e) => setFilterServiceType(e.target.value)}
                     >
                         <MenuItem value="">All</MenuItem>
-                        {uniqueValues("serviceType").map((value) => (
+                        {Array.from(new Set(data.shelterAvailabilities.map((s) => s.serviceType))).map((value) => (
                             <MenuItem key={value} value={value}>
                                 {value}
                             </MenuItem>
@@ -144,7 +255,7 @@ const App: React.FC = () => {
                         onChange={(e) => setFilterCapacityType(e.target.value)}
                     >
                         <MenuItem value="">All</MenuItem>
-                        {uniqueValues("capacityType").map((value) => (
+                        {Array.from(new Set(data.shelterAvailabilities.map((s) => s.capacityType))).map((value) => (
                             <MenuItem key={value} value={value}>
                                 {value}
                             </MenuItem>
@@ -158,13 +269,14 @@ const App: React.FC = () => {
                         onChange={(e) => setFilterSector(e.target.value)}
                     >
                         <MenuItem value="">All</MenuItem>
-                        {uniqueValues("sector").map((value) => (
+                        {Array.from(new Set(data.shelterAvailabilities.map((s) => s.sector))).map((value) => (
                             <MenuItem key={value} value={value}>
                                 {value}
                             </MenuItem>
                         ))}
                     </Select>
                 </FormControl>
+                <PostalCodeSearchBox />
             </Box>
 
             <TableContainer component={Paper}>
@@ -218,39 +330,64 @@ const App: React.FC = () => {
                                     Total Rooms
                                 </TableSortLabel>
                             </TableCell>
-                            <TableCell>Service Type</TableCell>
-                            <TableCell>Capacity Type</TableCell>
-                            <TableCell>Sector</TableCell>
+                            <TableCell>
+                                <TableSortLabel
+                                    active={sortColumn === "sector"}
+                                    direction={sortColumn === "sector" ? sortDirection : "asc"}
+                                    onClick={() => handleSort("sector")}
+                                >
+                                    Sector
+                                </TableSortLabel>
+                            </TableCell>
+                            <TableCell>
+                                <TableSortLabel
+                                    active={sortColumn === "serviceType"}
+                                    direction={sortColumn === "serviceType" ? sortDirection : "asc"}
+                                    onClick={() => handleSort("serviceType")}
+                                >
+                                    Service Type
+                                </TableSortLabel>
+                            </TableCell>
+                            <TableCell>
+                                <TableSortLabel
+                                    active={sortColumn === "capacityType"}
+                                    direction={sortColumn === "capacityType" ? sortDirection : "asc"}
+                                    onClick={() => handleSort("capacityType")}
+                                >
+                                    Service Type
+                                </TableSortLabel>
+                            </TableCell>
                         </TableRow>
                     </TableHead>
                     <TableBody>
                         {sortedData.map((shelter, index) => (
                             <TableRow key={index}>
                                 <TableCell>{shelter.name}</TableCell>
-                                <TableCell>
-                                    <a
-                                        href={`https://maps.google.com/?q=${encodeURIComponent(
-                                            shelter.address
-                                        )}`}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                    >
-                                        {shelter.address}
-                                    </a>
-                                </TableCell>
+                                <TableCell>{shelter.address}</TableCell>
                                 <TableCell>{shelter.postalCode}</TableCell>
                                 <TableCell>{shelter.availableBeds}</TableCell>
                                 <TableCell>{shelter.totalBeds}</TableCell>
                                 <TableCell>{shelter.availableRooms}</TableCell>
                                 <TableCell>{shelter.totalRooms}</TableCell>
+                                <TableCell>{shelter.sector}</TableCell>
                                 <TableCell>{shelter.serviceType}</TableCell>
                                 <TableCell>{shelter.capacityType}</TableCell>
-                                <TableCell>{shelter.sector}</TableCell>
                             </TableRow>
                         ))}
                     </TableBody>
                 </Table>
             </TableContainer>
+            <Box sx={{ mt: 4 }}>
+                <Typography variant="h5" sx={{ mb: 2, fontWeight: "bold" }}>
+                    About Our Shelter Availability Tracker
+                </Typography>
+                <Typography variant="body1" sx={{ lineHeight: 1.8 }}>
+                    Discover real-time information about shelters in Toronto with our comprehensive Shelter Availability Tracker. Designed to help individuals and families in need, this tool provides updated data on shelter capacity, including available beds and rooms. With filtering options for service type, capacity type, and sector, you can easily find the most suitable options near your location. Our distance-based sorting feature allows you to prioritize shelters closest to your postal code, making it convenient to find help when you need it most. Whether you're looking for emergency housing or specialized shelter services, our platform is here to support you.
+                </Typography>
+                <Typography variant="body1" sx={{ mt: 2, lineHeight: 1.8 }}>
+                    Explore the best options for temporary housing and stay informed with accurate, real-time updates. This tool is ideal for individuals seeking shelter in Toronto and surrounding areas or organizations providing assistance to those in need.
+                </Typography>
+            </Box>
         </Box>
     );
 };
