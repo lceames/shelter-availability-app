@@ -18,7 +18,7 @@ cities = [
 
 def get_postal_codes():
     address_data_path = "./postal_codes.csv"
-    postal_codes = []
+    postal_codes = {}
 
     with open(address_data_path, mode="r", newline="", encoding="utf-8") as file:
         reader = csv.DictReader(file)
@@ -26,12 +26,12 @@ def get_postal_codes():
         # Access rows as dictionaries
         for row in reader:
             if row["CITY"].lower() in cities:
-                postal_codes.append({"postal_code:": row["POSTAL_CODE"].lower(),
-                                     "longitude": row["LONGITUDE"],
-                                     "latitude": row["LATITUDE"]})
+                postal_codes[row["POSTAL_CODE"].lower()] = {
+                                     "lng": row["LONGITUDE"],
+                                     "lat": row["LATITUDE"]}
                     
     # File path to save the JSON file
-    file_path = "gta_postal_codes.json"
+    file_path = "static/gta_postal_codes.json"
 
     # Write dictionary to JSON file
     with open(file_path, "w") as json_file:

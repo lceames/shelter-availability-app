@@ -33,8 +33,8 @@ interface Shelter {
     totalBeds: number;
     availableRooms: number;
     totalRooms: number;
-    latitude?: number;
-    longitude?: number;
+    lat?: number;
+    lng?: number;
 }
 
 interface PostalCode {
@@ -46,23 +46,21 @@ interface PostalCode {
 interface AppData {
     shelterAvailabilities: Shelter[];
     updateDate: string;
-    postalCodes: PostalCode[]; 
 }
 
 const defaultAppData: AppData = {
     shelterAvailabilities: [],
-    updateDate: new Date().toISOString(), // Set a default date
-    postalCodes: [],
+    updateDate: new Date().toISOString(),
 };
 
 const App: React.FC = () => {
     const [data, setData] = useState<AppData>(defaultAppData);
     const [userInput, setUserInput] = useState<string>("");
-    const [selectedPostalCode, setSelectedPostalCode] = useState<PostalCode | null>(null);
+    const [selectedPostalCode, setSelectedPostalCode] = useState<string | null>(null);
     const [loading, setLoading] = useState<boolean>(true);
     const [error, setError] = useState<string | null>(null);
 
-    const [sortColumn, setSortColumn] = useState<keyof Shelter | "distance">("name");
+    const [sortColumn, setSortColumn] = useState<keyof Shelter>("name");
     const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
 
     const [filterServiceType, setFilterServiceType] = useState<string>("");
@@ -92,41 +90,31 @@ const App: React.FC = () => {
         return R * c; // Distance in kilometers
     };
 
-    const handleSort = (column: keyof Shelter | "distance") => {
+    const handleSort = (column: keyof Shelter) => {
         const isAsc = sortColumn === column && sortDirection === "asc";
         setSortDirection(isAsc ? "desc" : "asc");
         setSortColumn(column);
     };
 
-    const fetchCoordinates = async (postalCode: string): Promise<[number, number]> => {
-        // Replace this with an actual API call, e.g., Google Maps Geocoding API
-        const mockCoordinates: Record<string, [number, number]> = {
-            "M5G 1X8": [43.6561, -79.3802],
-            "M4B 1B3": [43.7064, -79.3097],
-        };
-        return mockCoordinates[postalCode] || [0, 0]; // Default mock location
-    };
+    // const calculateDistances = (value: string | null) => {
+    //     if (!value) return;
 
-    const calculateDistances = async () => {
-        if (!userPostalCode) return;
+    //     const { latitude: userLat, longitude: userLon } = data.postalCodes[value];
 
-        const [userLat, userLon] = await fetchCoordinates(userPostalCode);
+    //     const updatedDistances: Record<string, number> = {};
+    //     for (const shelter of data.shelterAvailabilities) {
+    //         const { longitude: shelterLat, latitude: shelterLon } = data.postalCodes[shelter.postalCode.toLowerCase()];
+    //         updatedDistances[shelter.postalCode] = calculateDistance(
+    //             userLat,
+    //             userLon,
+    //             shelterLat,
+    //             shelterLon
+    //         );
+    //     }
+    //     setDistances(updatedDistances);
+    // };
 
-        const updatedDistances: Record<string, number> = {};
-        for (const shelter of data.shelterAvailabilities) {
-            if (shelter.latitude !== undefined && shelter.longitude !== undefined) {
-                updatedDistances[shelter.postalCode] = calculateDistance(
-                    userLat,
-                    userLon,
-                    shelter.latitude,
-                    shelter.longitude
-                );
-            }
-        }
-        setDistances(updatedDistances);
-    };
-
-    const filteredData = data?.shelterAvailabilities.filter(
+    const filteredData = data.shelterAvailabilities.filter(
         (shelter) =>
             (!filterServiceType || shelter.serviceType === filterServiceType) &&
             (!filterCapacityType || shelter.capacityType === filterCapacityType) &&
@@ -134,7 +122,7 @@ const App: React.FC = () => {
     );
 
     const sortedData = [...filteredData].sort((a, b) => {
-        if (sortColumn === "distance") {
+        if (selectedPostalCode) {
             const distanceA = distances[a.postalCode] || Infinity;
             const distanceB = distances[b.postalCode] || Infinity;
             return sortDirection === "asc" ? distanceA - distanceB : distanceB - distanceA;
@@ -156,11 +144,10 @@ const App: React.FC = () => {
 
     const handleSearch = () => {
         if (selectedPostalCode) {
-            console.log(`Selected postal code: ${selectedPostalCode.code}`);
             setError(null);
             // Filter shelters based on selected postal code
             const filteredShelters = data.shelterAvailabilities.filter(
-                (shelter) => shelter.postalCode === selectedPostalCode.code
+                (shelter) => shelter.postalCode === selectedPostalCode
             );
             console.log("Filtered shelters:", filteredShelters);
         } else {
@@ -168,25 +155,15 @@ const App: React.FC = () => {
         }
     };
 
-    const PostalCodeSearchBox = () => (
-            <Autocomplete
-                options={data.postalCodes}
-                getOptionLabel={(option) => option.code}
-                onInputChange={(event, value) => setUserInput(value)}
-                onChange={(event, value) => setSelectedPostalCode(value)}
-                renderInput={(params) => (
-                    <TextField
-                        {...params}
-                        label="Enter postal code"
-                        variant="outlined"
-                        error={!!error}
-                        helperText={error}
-                        fullWidth
-                    />
-                )}
-                sx={{ minWidth: 200 }}
-            />
-    );
+    // const handlePostalCodeSelection = (value: string | null) => {
+    //     setSelectedPostalCode(value);
+    //     calculateDistances(value);
+    // };
+
+    // // Filter options based on user input
+    // const filteredOptions = Object.keys(data.postalCodes).filter((option) => {
+    //     return option.toLowerCase().includes(userInput.toLowerCase());
+    // });
 
     useEffect(() => {
         const fetchData = async () => {
@@ -276,7 +253,25 @@ const App: React.FC = () => {
                         ))}
                     </Select>
                 </FormControl>
-                <PostalCodeSearchBox />
+                {/* <Autocomplete
+                    options={filteredOptions.length < 30 ? filteredOptions : []}
+                    getOptionLabel={(option) => option}
+                    inputValue={userInput} // Control input with `userInput`
+                    onInputChange={(_, value) => setUserInput(value)} 
+                    onChange={(_, value) => handlePostalCodeSelection(value)}
+                    renderInput={(params) => (
+                        <TextField
+                            {...params}
+                            label="Enter postal code"
+                            variant="outlined"
+                            error={!!error}
+                            helperText={error}
+                            fullWidth
+                        />
+                    )}
+                    sx={{ minWidth: 200 }}
+                    noOptionsText="No options available"
+                /> */}
             </Box>
 
             <TableContainer component={Paper}>
