@@ -1,4 +1,5 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
+import { LoadScript, Autocomplete } from "@react-google-maps/api";
 import {
     Table,
     TableBody,
@@ -16,11 +17,12 @@ import {
     Typography,
     CircularProgress,
     TextField,
-    Button,
-    Autocomplete
+    Button
 } from "@mui/material";
 
 const API_BASE_URL = "http://127.0.0.1:5000";
+
+const GOOGLE_MAPS_API_KEY = "AIzaSyAH56IjRi1EBk5wztgI3vCfD0FFV0zuiy4";
 
 interface Shelter {
     name: string;
@@ -54,20 +56,36 @@ const defaultAppData: AppData = {
 };
 
 const App: React.FC = () => {
+    const [isGoogleLoaded, setGoogleLoaded] = useState(false);
     const [data, setData] = useState<AppData>(defaultAppData);
     const [userInput, setUserInput] = useState<string>("");
     const [selectedPostalCode, setSelectedPostalCode] = useState<string | null>(null);
     const [loading, setLoading] = useState<boolean>(true);
     const [error, setError] = useState<string | null>(null);
 
-    const [sortColumn, setSortColumn] = useState<keyof Shelter>("name");
-    const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
+    const [sortColumn, setSortColumn] = useState<keyof Shelter>("availableBeds");
+    const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
 
     const [filterServiceType, setFilterServiceType] = useState<string>("");
     const [filterCapacityType, setFilterCapacityType] = useState<string>("");
     const [filterSector, setFilterSector] = useState<string>("");
     const [userPostalCode, setUserPostalCode] = useState<string>("");
     const [distances, setDistances] = useState<Record<string, number>>({}); // Distance cache
+
+    const [inputValue, setInputValue] = useState<string>("");
+    const [suggestions, setSuggestions] = useState<string[]>([]);
+
+
+    const inputRef = useRef<HTMLInputElement | null>(null);
+    const [address, setAddress] = useState<string>("");
+    const [coordinates, setCoordinates] = useState<{ lat: number; lng: number } | null>(null);
+
+
+    // Handle input changes
+    const handleInputChange = (event: React.SyntheticEvent, value: string) => {
+        setInputValue(value);
+        // fetchSuggestions(value);
+    };
 
     // Function to calculate distance using Haversine formula
     const calculateDistance = (
@@ -96,23 +114,37 @@ const App: React.FC = () => {
         setSortColumn(column);
     };
 
-    // const calculateDistances = (value: string | null) => {
-    //     if (!value) return;
+    useEffect(() => {
+        if (!coordinates) return;
+    
+        const { lat: userLat, lng: userLon } = coordinates;
+    
+        const updatedDistances: Record<string, number> = {};
+        for (const shelter of data.shelterAvailabilities) {
+          if (!shelter.lat || !shelter.lng) continue;
+          updatedDistances[shelter.postalCode] = calculateDistance(
+            userLat,
+            userLon,
+            shelter.lat,
+            shelter.lng
+          );
+        }
+        setDistances(updatedDistances);
+      }, [coordinates, data.shelterAvailabilities]);
 
-    //     const { latitude: userLat, longitude: userLon } = data.postalCodes[value];
 
-    //     const updatedDistances: Record<string, number> = {};
-    //     for (const shelter of data.shelterAvailabilities) {
-    //         const { longitude: shelterLat, latitude: shelterLon } = data.postalCodes[shelter.postalCode.toLowerCase()];
-    //         updatedDistances[shelter.postalCode] = calculateDistance(
-    //             userLat,
-    //             userLon,
-    //             shelterLat,
-    //             shelterLon
-    //         );
-    //     }
-    //     setDistances(updatedDistances);
-    // };
+    const handlePlaceSelected = (place: google.maps.places.PlaceResult) => {
+        if (place.formatted_address) {
+            setAddress(place.formatted_address);
+        }
+
+        if (place.geometry?.location) {
+            setCoordinates({
+            lat: place.geometry.location.lat(),
+            lng: place.geometry.location.lng(),
+            });
+        }
+    };
 
     const filteredData = data.shelterAvailabilities.filter(
         (shelter) =>
@@ -122,7 +154,7 @@ const App: React.FC = () => {
     );
 
     const sortedData = [...filteredData].sort((a, b) => {
-        if (selectedPostalCode) {
+        if (coordinates) {
             const distanceA = distances[a.postalCode] || Infinity;
             const distanceB = distances[b.postalCode] || Infinity;
             return sortDirection === "asc" ? distanceA - distanceB : distanceB - distanceA;
@@ -154,16 +186,6 @@ const App: React.FC = () => {
             setError("Please select a valid postal code from the list.");
         }
     };
-
-    // const handlePostalCodeSelection = (value: string | null) => {
-    //     setSelectedPostalCode(value);
-    //     calculateDistances(value);
-    // };
-
-    // // Filter options based on user input
-    // const filteredOptions = Object.keys(data.postalCodes).filter((option) => {
-    //     return option.toLowerCase().includes(userInput.toLowerCase());
-    // });
 
     useEffect(() => {
         const fetchData = async () => {
@@ -205,75 +227,72 @@ const App: React.FC = () => {
     }
 
     return (
-        <Box sx={{ padding: "20px" }}>
-            <Typography variant="h4" sx={{ mb: 3, fontWeight: "bold" }}>
-                Toronto Shelter Availability
-            </Typography>
+        <LoadScript googleMapsApiKey={GOOGLE_MAPS_API_KEY} libraries={["places"]}>
+            <Box sx={{ padding: "20px" }}>
+                <Typography variant="h4" sx={{ mb: 3, fontWeight: "bold" }}>
+                    Toronto Shelter Availability
+                </Typography>
 
-            <Box sx={{ display: "flex", gap: "20px", mb: 3, flexWrap: "wrap" }}>
-                <FormControl sx={{ minWidth: 200 }}>
-                    <InputLabel>Service Type</InputLabel>
-                    <Select
-                        value={filterServiceType}
-                        onChange={(e) => setFilterServiceType(e.target.value)}
-                    >
-                        <MenuItem value="">All</MenuItem>
-                        {Array.from(new Set(data.shelterAvailabilities.map((s) => s.serviceType))).map((value) => (
-                            <MenuItem key={value} value={value}>
-                                {value}
-                            </MenuItem>
-                        ))}
-                    </Select>
-                </FormControl>
-                <FormControl sx={{ minWidth: 200 }}>
-                    <InputLabel>Capacity Type</InputLabel>
-                    <Select
-                        value={filterCapacityType}
-                        onChange={(e) => setFilterCapacityType(e.target.value)}
-                    >
-                        <MenuItem value="">All</MenuItem>
-                        {Array.from(new Set(data.shelterAvailabilities.map((s) => s.capacityType))).map((value) => (
-                            <MenuItem key={value} value={value}>
-                                {value}
-                            </MenuItem>
-                        ))}
-                    </Select>
-                </FormControl>
-                <FormControl sx={{ minWidth: 200 }}>
-                    <InputLabel>Sector</InputLabel>
-                    <Select
-                        value={filterSector}
-                        onChange={(e) => setFilterSector(e.target.value)}
-                    >
-                        <MenuItem value="">All</MenuItem>
-                        {Array.from(new Set(data.shelterAvailabilities.map((s) => s.sector))).map((value) => (
-                            <MenuItem key={value} value={value}>
-                                {value}
-                            </MenuItem>
-                        ))}
-                    </Select>
-                </FormControl>
-                {/* <Autocomplete
-                    options={filteredOptions.length < 30 ? filteredOptions : []}
-                    getOptionLabel={(option) => option}
-                    inputValue={userInput} // Control input with `userInput`
-                    onInputChange={(_, value) => setUserInput(value)} 
-                    onChange={(_, value) => handlePostalCodeSelection(value)}
-                    renderInput={(params) => (
+                <Box sx={{ display: "flex", gap: "20px", mb: 3, flexWrap: "wrap" }}>
+                    <FormControl sx={{ minWidth: 200 }}>
+                        <InputLabel>Service Type</InputLabel>
+                        <Select
+                            value={filterServiceType}
+                            onChange={(e) => setFilterServiceType(e.target.value)}
+                        >
+                            <MenuItem value="">All</MenuItem>
+                            {Array.from(new Set(data.shelterAvailabilities.map((s) => s.serviceType))).map((value) => (
+                                <MenuItem key={value} value={value}>
+                                    {value}
+                                </MenuItem>
+                            ))}
+                        </Select>
+                    </FormControl>
+                    <FormControl sx={{ minWidth: 200 }}>
+                        <InputLabel>Capacity Type</InputLabel>
+                        <Select
+                            value={filterCapacityType}
+                            onChange={(e) => setFilterCapacityType(e.target.value)}
+                        >
+                            <MenuItem value="">All</MenuItem>
+                            {Array.from(new Set(data.shelterAvailabilities.map((s) => s.capacityType))).map((value) => (
+                                <MenuItem key={value} value={value}>
+                                    {value}
+                                </MenuItem>
+                            ))}
+                        </Select>
+                    </FormControl>
+                    <FormControl sx={{ minWidth: 200 }}>
+                        <InputLabel>Sector</InputLabel>
+                        <Select
+                            value={filterSector}
+                            onChange={(e) => setFilterSector(e.target.value)}
+                        >
+                            <MenuItem value="">All</MenuItem>
+                            {Array.from(new Set(data.shelterAvailabilities.map((s) => s.sector))).map((value) => (
+                                <MenuItem key={value} value={value}>
+                                    {value}
+                                </MenuItem>
+                            ))}
+                        </Select>
+                    </FormControl>
+                    <Autocomplete
+                        onLoad={(autocomplete) => {
+                            autocomplete.addListener("place_changed", () => {
+                            const place = autocomplete.getPlace();
+                            handlePlaceSelected(place);
+                            });
+                        }}
+                        >
                         <TextField
-                            {...params}
-                            label="Enter postal code"
+                            label="Search Address"
                             variant="outlined"
-                            error={!!error}
-                            helperText={error}
                             fullWidth
+                            value={address}
+                            onChange={(e) => setAddress(e.target.value)}
                         />
-                    )}
-                    sx={{ minWidth: 200 }}
-                    noOptionsText="No options available"
-                /> */}
-            </Box>
-
+                    </Autocomplete>
+                </Box>
             <TableContainer component={Paper}>
                 <Table>
                     <TableHead>
@@ -384,6 +403,7 @@ const App: React.FC = () => {
                 </Typography>
             </Box>
         </Box>
+        </LoadScript>
     );
 };
 

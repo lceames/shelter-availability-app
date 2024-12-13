@@ -103,7 +103,7 @@ def space_available(record, availability_key):
         print(UNEXPECTED_SCHEMA_ERROR_MESSAGE)
         return False
     
-def get_current_records() -> Tuple[str, list[Shelter]]:
+def fetch_data_from_toronto_api() -> Tuple[str, list[Shelter]]:
     params =  { "id": "daily-shelter-overnight-service-occupancy-capacity"}
     try:    
         package = requests.get(PACKAGE_URL, params = params).json()
@@ -138,32 +138,6 @@ def get_current_records() -> Tuple[str, list[Shelter]]:
     else:
         return None, []
 
-def fetch_available_shelters() -> Tuple[str, list[Shelter]]:
-    """Fetches available rooms and beds from current records based on capacity type."""
-    update_date, current_records = get_current_records()
-    bed_based_availabilities = []
-    room_based_availabilities = []
-
-    for record in current_records:
-        if record.capacityType == ROOM_BASED_CAPACITY:
-            unoccupied_key = UNOCCUPIED_ROOMS_KEY
-            availabilities = room_based_availabilities
-        elif record.capacityType == BED_BASED_CAPACITY:
-            unoccupied_key = UNOCCUPIED_BEDS_KEY
-            availabilities = bed_based_availabilities
-        else:
-            continue
-
-        # if not record.:
-        #     print(UNEXPECTED_SCHEMA_ERROR_MESSAGE)
-        #     continue
-        
-        # if space_available(record=record, availability_key=unoccupied_key):
-        availabilities.append(record)
-
-    return update_date, bed_based_availabilities + room_based_availabilities
-
-
 def fetch_geocoordinates_from_postal_code(postal_code) -> Tuple[str, str]:
     try:
         geocode_result = gmaps.geocode(postal_code)
@@ -194,9 +168,8 @@ def add_geocordinates_to_shelters(shelters: list[Shelter]) -> list[Shelter]:
 @app.route('/api/shelters')
 def get_shelters():
     print('Received request')
-    update_date, available_shelters = fetch_available_shelters()
+    update_date, available_shelters = fetch_data_from_toronto_api()
     shelters_with_geo = add_geocordinates_to_shelters(available_shelters)
-    
     return jsonify({"shelterAvailabilities": shelters_with_geo, "updateDate": update_date})
 
 if __name__ == "__main__":

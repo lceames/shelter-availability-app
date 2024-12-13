@@ -6,10 +6,11 @@
     "@emotion/react": "latest",
     "@emotion/styled": "latest",
     "@mui/material": "latest",
+    "@react-google-maps/api": "^2.20.3",
     "@types/react": "latest",
     "@types/react-dom": "latest",
-    "react": "19.0.0",
-    "react-dom": "latest",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
     "react-scripts": "latest",
     "typescript": "latest"
   },
