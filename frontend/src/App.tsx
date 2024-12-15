@@ -37,6 +37,7 @@ interface Shelter {
     totalRooms: number;
     lat?: number;
     lng?: number;
+    distance?: number;
 }
 
 interface PostalCode {
@@ -56,44 +57,25 @@ const defaultAppData: AppData = {
 };
 
 const App: React.FC = () => {
-    const [isGoogleLoaded, setGoogleLoaded] = useState(false);
     const [data, setData] = useState<AppData>(defaultAppData);
-    const [userInput, setUserInput] = useState<string>("");
-    const [selectedPostalCode, setSelectedPostalCode] = useState<string | null>(null);
     const [loading, setLoading] = useState<boolean>(true);
     const [error, setError] = useState<string | null>(null);
-
     const [sortColumn, setSortColumn] = useState<keyof Shelter>("availableBeds");
     const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
-
     const [filterServiceType, setFilterServiceType] = useState<string>("");
     const [filterCapacityType, setFilterCapacityType] = useState<string>("");
     const [filterSector, setFilterSector] = useState<string>("");
-    const [userPostalCode, setUserPostalCode] = useState<string>("");
-    const [distances, setDistances] = useState<Record<string, number>>({}); // Distance cache
-
-    const [inputValue, setInputValue] = useState<string>("");
-    const [suggestions, setSuggestions] = useState<string[]>([]);
-
-
-    const inputRef = useRef<HTMLInputElement | null>(null);
     const [address, setAddress] = useState<string>("");
     const [coordinates, setCoordinates] = useState<{ lat: number; lng: number } | null>(null);
 
-
-    // Handle input changes
-    const handleInputChange = (event: React.SyntheticEvent, value: string) => {
-        setInputValue(value);
-        // fetchSuggestions(value);
-    };
-
     // Function to calculate distance using Haversine formula
     const calculateDistance = (
-        lat1: number,
-        lon1: number,
-        lat2: number,
-        lon2: number
-    ): number => {
+        lat1: number | undefined,
+        lon1: number | undefined,
+        lat2: number | undefined,
+        lon2: number | undefined
+    ): number | undefined => {
+        if (!lat1 ||!lon1 || !lat2 || !lon2) { return Infinity };
         const toRad = (value: number) => (value * Math.PI) / 180;
         const R = 6371; // Radius of Earth in kilometers
         const dLat = toRad(lat2 - lat1);
@@ -119,17 +101,16 @@ const App: React.FC = () => {
     
         const { lat: userLat, lng: userLon } = coordinates;
     
-        const updatedDistances: Record<string, number> = {};
         for (const shelter of data.shelterAvailabilities) {
-          if (!shelter.lat || !shelter.lng) continue;
-          updatedDistances[shelter.postalCode] = calculateDistance(
+            if (!shelter.lat || !shelter.lng) continue;
+            
+            shelter.distance = calculateDistance(
             userLat,
             userLon,
             shelter.lat,
             shelter.lng
-          );
+            );
         }
-        setDistances(updatedDistances);
       }, [coordinates, data.shelterAvailabilities]);
 
 
@@ -139,10 +120,16 @@ const App: React.FC = () => {
         }
 
         if (place.geometry?.location) {
-            setCoordinates({
-            lat: place.geometry.location.lat(),
-            lng: place.geometry.location.lng(),
-            });
+            const lat = place.geometry.location.lat();
+            const lng = place.geometry.location.lng();
+            const updatedShelters = data.shelterAvailabilities.map((s) => ({
+                    ...s,
+                    distance: calculateDistance(lat, lng, s.lat, s.lng), // Set all statuses to "inactive"
+              }));
+
+            setSortDirection("asc");
+            setSortColumn("distance");
+            setData({...data, shelterAvailabilities: updatedShelters})
         }
     };
 
@@ -155,8 +142,8 @@ const App: React.FC = () => {
 
     const sortedData = [...filteredData].sort((a, b) => {
         if (coordinates) {
-            const distanceA = distances[a.postalCode] || Infinity;
-            const distanceB = distances[b.postalCode] || Infinity;
+            const distanceA = a.distance || Infinity;
+            const distanceB = b.distance || Infinity;
             return sortDirection === "asc" ? distanceA - distanceB : distanceB - distanceA;
         }
 
@@ -173,19 +160,6 @@ const App: React.FC = () => {
         }
         return 0;
     });
-
-    const handleSearch = () => {
-        if (selectedPostalCode) {
-            setError(null);
-            // Filter shelters based on selected postal code
-            const filteredShelters = data.shelterAvailabilities.filter(
-                (shelter) => shelter.postalCode === selectedPostalCode
-            );
-            console.log("Filtered shelters:", filteredShelters);
-        } else {
-            setError("Please select a valid postal code from the list.");
-        }
-    };
 
     useEffect(() => {
         const fetchData = async () => {
@@ -371,6 +345,15 @@ const App: React.FC = () => {
                                     Service Type
                                 </TableSortLabel>
                             </TableCell>
+                            <TableCell>
+                                <TableSortLabel
+                                    active={sortColumn === "distance"}
+                                    direction={sortColumn === "distance" ? sortDirection : "desc"}
+                                    onClick={() => handleSort("distance")}
+                                >
+                                    Distance
+                                </TableSortLabel>
+                            </TableCell>
                         </TableRow>
                     </TableHead>
                     <TableBody>
@@ -386,6 +369,7 @@ const App: React.FC = () => {
                                 <TableCell>{shelter.sector}</TableCell>
                                 <TableCell>{shelter.serviceType}</TableCell>
                                 <TableCell>{shelter.capacityType}</TableCell>
+                                <TableCell>{shelter.distance}</TableCell>
                             </TableRow>
                         ))}
                     </TableBody>
