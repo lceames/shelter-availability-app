@@ -17,12 +17,13 @@ import {
     Typography,
     CircularProgress,
     TextField,
-    Button
+    FormControlLabel, 
+    Checkbox, 
 } from "@mui/material";
 
 const API_BASE_URL = "http://127.0.0.1:5000";
 
-const GOOGLE_MAPS_API_KEY = "AIzaSyAH56IjRi1EBk5wztgI3vCfD0FFV0zuiy4";
+const GOOGLE_MAPS_API_KEY = "";
 
 interface Shelter {
     name: string;
@@ -67,6 +68,7 @@ const App: React.FC = () => {
     const [filterSector, setFilterSector] = useState<string>("");
     const [address, setAddress] = useState<string>("");
     const [coordinates, setCoordinates] = useState<{ lat: number; lng: number } | null>(null);
+    const [showUnavailableShelters, setShowUnavailableShelters] = useState<boolean>(false);
 
     // Function to calculate distance using Haversine formula
     const calculateDistance = (
@@ -89,6 +91,10 @@ const App: React.FC = () => {
         const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
         return R * c; // Distance in kilometers
     };
+
+    const handleUnavailableSheltersCheckbox = (event: React.ChangeEvent<HTMLInputElement>) => {
+        setShowUnavailableShelters(event.target.checked);
+      };
 
     const handleSort = (column: keyof Shelter) => {
         const isAsc = sortColumn === column && sortDirection === "asc";
@@ -137,7 +143,8 @@ const App: React.FC = () => {
         (shelter) =>
             (!filterServiceType || shelter.serviceType === filterServiceType) &&
             (!filterCapacityType || shelter.capacityType === filterCapacityType) &&
-            (!filterSector || shelter.sector === filterSector)
+            (!filterSector || shelter.sector === filterSector) && 
+            (showUnavailableShelters || shelter.availableBeds || shelter.availableRooms)
     );
 
     const sortedData = [...filteredData].sort((a, b) => {
@@ -160,6 +167,11 @@ const App: React.FC = () => {
         }
         return 0;
     });
+
+    const containerStyle = {
+        width: '400px',
+        height: '400px',
+      }
 
     useEffect(() => {
         const fetchData = async () => {
@@ -206,9 +218,8 @@ const App: React.FC = () => {
                 <Typography variant="h4" sx={{ mb: 3, fontWeight: "bold" }}>
                     Toronto Shelter Availability
                 </Typography>
-
                 <Box sx={{ display: "flex", gap: "20px", mb: 3, flexWrap: "wrap" }}>
-                    <FormControl sx={{ minWidth: 200 }}>
+                    <FormControl sx={{ minWidth: 200}}>
                         <InputLabel>Service Type</InputLabel>
                         <Select
                             value={filterServiceType}
@@ -250,22 +261,35 @@ const App: React.FC = () => {
                             ))}
                         </Select>
                     </FormControl>
-                    <Autocomplete
-                        onLoad={(autocomplete) => {
-                            autocomplete.addListener("place_changed", () => {
-                            const place = autocomplete.getPlace();
-                            handlePlaceSelected(place);
-                            });
-                        }}
-                        >
-                        <TextField
-                            label="Search Address"
-                            variant="outlined"
-                            fullWidth
-                            value={address}
-                            onChange={(e) => setAddress(e.target.value)}
+                    <Box minWidth={350}>
+                        <Autocomplete
+                            onLoad={(autocomplete) => {
+                                autocomplete.addListener("place_changed", () => {
+                                const place = autocomplete.getPlace();
+                                handlePlaceSelected(place);
+                                });
+                            }}
+                            >
+                            <TextField
+                                label="Search Address"
+                                variant="outlined"
+                                fullWidth
+                                value={address}
+                                onChange={(e) => setAddress(e.target.value)}
+                            />
+                        </Autocomplete>
+                    </Box>
+                    
+                    <FormControlLabel
+                        control={
+                        <Checkbox
+                            checked={showUnavailableShelters}
+                            onChange={handleUnavailableSheltersCheckbox}
+                            color="primary" // Sets the color
                         />
-                    </Autocomplete>
+                        }
+                        label={"Show Unavailable Shelters"}
+                    />
                 </Box>
             <TableContainer component={Paper}>
                 <Table>
@@ -351,7 +375,7 @@ const App: React.FC = () => {
                                     direction={sortColumn === "distance" ? sortDirection : "desc"}
                                     onClick={() => handleSort("distance")}
                                 >
-                                    Distance
+                                    Distance (km)
                                 </TableSortLabel>
                             </TableCell>
                         </TableRow>
@@ -369,12 +393,15 @@ const App: React.FC = () => {
                                 <TableCell>{shelter.sector}</TableCell>
                                 <TableCell>{shelter.serviceType}</TableCell>
                                 <TableCell>{shelter.capacityType}</TableCell>
-                                <TableCell>{shelter.distance}</TableCell>
+                                <TableCell>{shelter.distance == Infinity ? "" : shelter.distance?.toFixed(1)}</TableCell>
                             </TableRow>
                         ))}
                     </TableBody>
                 </Table>
             </TableContainer>
+            <Typography variant="body1">
+                        Last Updated : {data.updateDate}
+                </Typography>
             <Box sx={{ mt: 4 }}>
                 <Typography variant="h5" sx={{ mb: 2, fontWeight: "bold" }}>
                     About Our Shelter Availability Tracker

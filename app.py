@@ -52,7 +52,7 @@ SECTOR_KEY = 'SECTOR'
 SERVICE_TYPE_KEY = 'OVERNIGHT_SERVICE_TYPE'
 UNEXPECTED_SCHEMA_ERROR_MESSAGE = 'Unexpected API response schema'
 RESOURCE_NAME = 'daily shelter overnight occupancy'
-GOOGLE_MAPS_API_KEY = 'AIzaSyAH56IjRi1EBk5wztgI3vCfD0FFV0zuiy4'
+GOOGLE_MAPS_API_KEY = ''
 
 today_date = datetime.now()
 TODAY_DATE_STRING = today_date.strftime("%Y-%m-%d")
