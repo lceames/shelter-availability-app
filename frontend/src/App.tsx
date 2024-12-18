@@ -21,10 +21,6 @@ import {
     Checkbox, 
 } from "@mui/material";
 
-const API_BASE_URL = "http://127.0.0.1:5000";
-
-const GOOGLE_MAPS_API_KEY = "";
-
 interface Shelter {
     name: string;
     address: string;
@@ -58,6 +54,9 @@ const defaultAppData: AppData = {
 };
 
 const App: React.FC = () => {
+    const googleMapsApiKey = process.env.REACT_APP_GOOGLE_MAPS_API_KEY ? process.env.REACT_APP_GOOGLE_MAPS_API_KEY : '';
+    const api_base_url = process.env.REACT_APP_API_BASE_URL ? process.env.REACT_APP_API_BASE_URL : '';
+
     const [data, setData] = useState<AppData>(defaultAppData);
     const [loading, setLoading] = useState<boolean>(true);
     const [error, setError] = useState<string | null>(null);
@@ -176,7 +175,7 @@ const App: React.FC = () => {
     useEffect(() => {
         const fetchData = async () => {
             try {
-                const response = await fetch(`${API_BASE_URL}/api/shelters`);
+                const response = await fetch(`${api_base_url}/api/shelters`);
                 if (!response.ok) {
                     throw new Error(`HTTP error! status: ${response.status}`);
                 }
@@ -213,7 +212,7 @@ const App: React.FC = () => {
     }
 
     return (
-        <LoadScript googleMapsApiKey={GOOGLE_MAPS_API_KEY} libraries={["places"]}>
+        <LoadScript googleMapsApiKey={googleMapsApiKey} libraries={["places"]}>
             <Box sx={{ padding: "20px" }}>
                 <Typography variant="h4" sx={{ mb: 3, fontWeight: "bold" }}>
                     Toronto Shelter Availability

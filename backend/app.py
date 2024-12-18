@@ -1,3 +1,6 @@
+import logging
+from dataclasses import dataclass
+from typing import Optional
 import requests, json, os, random
 from datetime import datetime, timedelta
 from collections import defaultdict
@@ -52,13 +55,8 @@ SECTOR_KEY = 'SECTOR'
 SERVICE_TYPE_KEY = 'OVERNIGHT_SERVICE_TYPE'
 UNEXPECTED_SCHEMA_ERROR_MESSAGE = 'Unexpected API response schema'
 RESOURCE_NAME = 'daily shelter overnight occupancy'
-GOOGLE_MAPS_API_KEY = ''
 
-today_date = datetime.now()
-TODAY_DATE_STRING = today_date.strftime("%Y-%m-%d")
-YESTERDAY_DATE_STRING = (today_date - timedelta(days=1)).strftime("%Y-%m-%d")
-
-gmaps = googlemaps.Client(key=GOOGLE_MAPS_API_KEY)
+gmaps = googlemaps.Client(key=os.environ['GOOGLE_MAPS_API_KEY'])
 
 POSTAL_CODES_PATH = os.path.join(app.static_folder, 'gta_postal_codes.json')
 
@@ -77,12 +75,20 @@ class Shelter:
     lat: Optional[float] = None
     lng: Optional[float] = None
 
-    def __post_init__(self):
-        self.postalCode = self.postalCode.lower() if self.postalCode else None
-        self.availableBeds = 0 if not self.availableBeds else int(self.availableBeds)
-        self.totalBeds = 0 if not self.totalBeds else int(self.totalBeds)
-        self.availableRooms = 0 if not self.availableRooms else int(self.availableRooms)
-        self.totalRooms = 0 if not self.totalRooms else int(self.totalRooms)
+    def __post_init__(self) -> None:
+        try:
+            self.postalCode = self.postalCode.lower() if self.postalCode else None
+            self.availableBeds = max(0, int(self.availableBeds)) if self.availableBeds else 0
+            self.totalBeds = max(0, int(self.totalBeds)) if self.totalBeds else 0
+            self.availableRooms = max(0, int(self.availableRooms)) if self.availableRooms else 0
+            self.totalRooms = max(0, int(self.totalRooms)) if self.totalRooms else 0
+
+            if self.lat is not None and not (-90 <= self.lat <= 90):
+                raise ValueError("Latitude must be between -90 and 90 degrees.")
+            if self.lng is not None and not (-180 <= self.lng <= 180):
+                raise ValueError("Longitude must be between -180 and 180 degrees.")
+        except Exception as e:
+            logging.error(f"Error initializing Shelter: {e}")
 
 def load_postal_codes():
     if _gta_postal_codes is None:
@@ -173,4 +179,5 @@ def get_shelters():
     return jsonify({"shelterAvailabilities": shelters_with_geo, "updateDate": update_date})
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port)
