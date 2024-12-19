@@ -13,5 +13,3 @@ COPY frontend/package.json .
 RUN npm install
 COPY frontend/ .
 RUN npm run build
-
-# Serve the combined app (optional)
