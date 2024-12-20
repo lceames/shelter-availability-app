@@ -27,10 +27,9 @@ if os.environ.get('DEBUG'):
     print(f"Debugger PIN: {debug_pin}")
 
 
-app = Flask(__name__)
+app = Flask(__name__, static_folder="../frontend/build")
 CORS(app)
 _gta_postal_codes = None
-app.static_folder = "static"
 
 BASE_URL = "https://ckan0.cf.opendata.inter.prod-toronto.ca"
 PACKAGE_URL = BASE_URL + "/api/3/action/package_show"
@@ -53,7 +52,7 @@ RESOURCE_NAME = 'daily shelter overnight occupancy'
 
 gmaps = googlemaps.Client(key=os.environ['GOOGLE_MAPS_API_KEY'])
 
-POSTAL_CODES_PATH = os.path.join(app.static_folder, 'gta_postal_codes.json')
+POSTAL_CODES_PATH = 'backend/data/gta_postal_codes.json'
 
 @dataclass
 class Shelter:
@@ -173,13 +172,13 @@ def get_shelters():
     shelters_with_geo = add_geocordinates_to_shelters(available_shelters)
     return jsonify({"shelterAvailabilities": shelters_with_geo, "updateDate": update_date})
 
-@app.route("/<path:path>")
-def serve_react(path):
-    return send_from_directory("frontend/build", path)
+@app.route("/static/<path:path>")
+def serve_static(path):
+    return send_from_directory(os.path.join(app.static_folder, "static"), path)
 
 @app.route("/")
 def serve_index():
-    return send_from_directory("frontend/build", "index.html")
+    return send_from_directory(app.static_folder, "index.html")
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
