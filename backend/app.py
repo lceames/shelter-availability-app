@@ -28,7 +28,7 @@ if os.environ.get('DEBUG'):
 
 
 app = Flask(__name__, static_folder="../frontend/build")
-CORS(app)
+CORS(app, resources={r"/*": {"origins": "*"}})
 _gta_postal_codes = None
 
 BASE_URL = "https://ckan0.cf.opendata.inter.prod-toronto.ca"
@@ -179,6 +179,14 @@ def serve_static(path):
 @app.route("/")
 def serve_index():
     return send_from_directory(app.static_folder, "index.html")
+
+@app.route('/<path:path>', methods=['OPTIONS'])
+def options_handler(path):
+    response = app.make_response('', 200)
+    response.headers["Access-Control-Allow-Origin"] = "*"
+    response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
+    response.headers["Access-Control-Allow-Headers"] = "Content-Type"
+    return response
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5005))
